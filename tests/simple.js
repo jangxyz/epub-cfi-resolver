@@ -1,20 +1,23 @@
-'use strict';
-
 const debug = false; // Enable debug output?
 
-var tape = require('tape');
+//var tape = require('tape');
+//var CFI = require('../index.js');
+var { default: tape } = await import('tape');
+var { default: CFI } = await import('../index.js');
 
-var CFI = require('../index.js');
 
 // Allow these tests to run outside of the browser
-var JSDOM = require('jsdom').JSDOM;
+//var JSDOM = require('jsdom').JSDOM;
+var JSDOM = (await import('jsdom')).JSDOM;
+
 function parseDOM(str, mimetype) {
   return new JSDOM(str, {
     contentType: mimetype
   }).window.document;
 }
 
-var docs = require('../test_data/from_spec.js');
+//var docs = require('../test_data/from_spec.js');
+var docs = await import('../test_data/from_spec.js');
 
 var tests = [
   {
@@ -486,3 +489,5 @@ tape('Simple tests', function(t) {
   }
 
 });
+
+export {};

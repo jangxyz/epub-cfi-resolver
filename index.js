@@ -1057,6 +1057,5 @@ class CFI {
   
 }
 
-module.exports = CFI;
-
-
+//module.exports = CFI;
+export default CFI;
