@@ -25,22 +25,17 @@ const nwHtmlDOM = parseDOM(nwDocs.html, 'application/xhtml+xml');
 const badDOM = parseDOM(badDoc, 'application/xhtml+xml');
 
 function generateAndCompare(t, dom, node, offset, cfi) {
-
   var c = CFI.generate(node, offset);
-  
   t.equal(c, cfi);
          
   var cfi = new CFI(c);
-  
   var bookmark = cfi.resolveLast(dom);
-
   t.equal(bookmark.node, node);
   t.equal(bookmark.offset, offset);
   
   bookmark = cfi.resolveLast(dom, {
     ignoreIDs: true
   });
-
   t.equal(bookmark.node, node);
   t.equal(bookmark.offset, offset);
 }
@@ -51,17 +46,17 @@ tape('Generator', function(t) {
 
   var cfiStr = 'epubcfi(/2/4[body01]/10[para05]/3:5)';
   
-  var node = htmlDOM.querySelector('#para05').lastChild;
+  var node = htmlDOM.querySelector('#para05')?.lastChild;
   
   generateAndCompare(t, htmlDOM, node, 5, cfiStr)
 
-  node = nwHtmlDOM.querySelector('#para05').lastChild;
+  node = nwHtmlDOM.querySelector('#para05')?.lastChild;
   
   generateAndCompare(t, nwHtmlDOM, node, 5, cfiStr)
 
   cfiStr = 'epubcfi(/2/4/2[!/^[^]^,^;]/2/4[!/foo^^^[^]]/1:10)';
 
-  node = badDOM.getElementById('!/foo^[]').lastChild;
+  node = badDOM.getElementById('!/foo^[]')?.lastChild;
   
   generateAndCompare(t, badDOM, node, 1, cfiStr);
   

@@ -394,24 +394,13 @@ var tests = [
     cfi: "epubcfi(/2~42.43@100:101/4!/6/8:100/6:200)",
     parsed: [
       [
-        {
-          "nodeIndex": 2
-        },
-        {
-          "nodeIndex": 4
-        }
+        { "nodeIndex": 2 },
+        { "nodeIndex": 4 }
       ],
       [
-        {
-          "nodeIndex": 6
-        },
-        {
-          "nodeIndex": 8
-        },
-        {
-          "nodeIndex": 6,
-          "offset": 200
-        }
+        { "nodeIndex": 6 },
+        { "nodeIndex": 8 },
+        { "nodeIndex": 6, "offset": 200 }
       ]
     ]
   }, { // Test that parser ignores vender extensions
@@ -430,7 +419,6 @@ var tests = [
         }
       ]
     ]
-
   }
 ];
 
@@ -452,7 +440,7 @@ tape('Simple tests', function(t) {
   for(let test of tests) {
 
     try {
-      var cfi = new CFI(test.cfi);
+      const cfi = new CFI(test.cfi);
       
       if(debug) console.log("parsed:", JSON.stringify(cfi.get(), null, 2));
 
