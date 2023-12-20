@@ -22,7 +22,7 @@
   "scripts": {
     "build": "browserify example/example.js -o example/bundle.js",
     "watch": "watchify example/example.js -o example/bundle.js",
-    "test": "tape tests/*.js"
+    "test": "tape-es 'tests/*.js'"
   },
   "license": "AGPL-3.0",
   "type": "module"

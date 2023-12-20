@@ -1,12 +1,10 @@
-'use strict';
-
 const debug = false; // Enable debug output?
 
-var tape = require('tape');
-var CFI = require('../index.js');
+var { default: tape } = await import('tape');
+var { default: CFI } = await import('../index.js');
 
 // Allow these tests to run outside of the browser
-var JSDOM = require('jsdom').JSDOM;
+var JSDOM = (await import('jsdom')).JSDOM;
 
 const toCompare = [
   {
@@ -128,3 +126,5 @@ tape('Compare', function(t) {
   t.equal(a[3].cfi, no3.cfi, "Testing .sort() 3");
  
 });
+
+export {};

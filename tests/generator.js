@@ -1,12 +1,10 @@
-'use strict';
-
 const debug = false; // Enable debug output?
 
-var tape = require('tape');
-var CFI = require('../index.js');
+var { default: tape } = await import('tape');
+var { default: CFI } = await import('../index.js');
 
 // Allow these tests to run outside of the browser
-var JSDOM = require('jsdom').JSDOM;
+var JSDOM = (await import('jsdom')).JSDOM;
 
 function parseDOM(str, mimetype) {
   return new JSDOM(str, {
@@ -14,9 +12,9 @@ function parseDOM(str, mimetype) {
   }).window.document;
 }
 
-var docs = require('../test_data/from_spec.js');
-var nwDocs = require('../test_data/no_whitespace.js');
-var badDoc = require('../test_data/bad.js');
+var docs = await import('../test_data/from_spec.js');
+var nwDocs = await import('../test_data/no_whitespace.js');
+var { default: badDoc } = await import('../test_data/bad.js');
 
 const opfDOM = parseDOM(docs.opf, 'application/xhtml+xml');
 const htmlDOM = parseDOM(docs.html, 'application/xhtml+xml');
@@ -78,3 +76,5 @@ tape('Generator', function(t) {
   t.equal(c, cfiStr, "Calling generator with array");
  
 });
+
+export {};

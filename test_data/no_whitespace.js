@@ -28,7 +28,7 @@ const opf1 = `<?xml version="1.0"?><package version="2.0"
 
 const chap1 = `<html xmlns="http://www.w3.org/1999/xhtml"><head><title>…</title></head><body id="body01"><p>…</p><p>…</p><p>…</p><p>…</p><p id="para05">xxx<em>yyy</em>0123456789</p><p>…</p><p>…</p><img id="svgimg" src="foo.svg" alt="…"/><p>…</p><p>…</p></body></html>`;
 
-module.exports = {
-  opf: opf1,
-  html: chap1
+export {
+  opf1 as opf,
+  chap1 as html
 };

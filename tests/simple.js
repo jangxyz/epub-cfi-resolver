@@ -5,11 +5,9 @@ const debug = false; // Enable debug output?
 var { default: tape } = await import('tape');
 var { default: CFI } = await import('../index.js');
 
-
 // Allow these tests to run outside of the browser
 //var JSDOM = require('jsdom').JSDOM;
 var JSDOM = (await import('jsdom')).JSDOM;
-
 function parseDOM(str, mimetype) {
   return new JSDOM(str, {
     contentType: mimetype
