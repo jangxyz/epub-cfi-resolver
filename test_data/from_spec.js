@@ -69,7 +69,7 @@ const chap1 = `
     </body>
 </html>`;
 
-module.exports = {
-  opf: opf1,
-  html: chap1
-};
+
+//module.exports = { opf: opf1, html: chap1 };
+
+export { opf1 as opf, chap1 as html };

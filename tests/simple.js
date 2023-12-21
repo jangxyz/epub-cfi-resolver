@@ -1,20 +1,21 @@
-'use strict';
-
 const debug = false; // Enable debug output?
 
-var tape = require('tape');
-
-var CFI = require('../index.js');
+//var tape = require('tape');
+//var CFI = require('../index.js');
+var { default: tape } = await import('tape');
+var { default: CFI } = await import('../index.js');
 
 // Allow these tests to run outside of the browser
-var JSDOM = require('jsdom').JSDOM;
+//var JSDOM = require('jsdom').JSDOM;
+var JSDOM = (await import('jsdom')).JSDOM;
 function parseDOM(str, mimetype) {
   return new JSDOM(str, {
     contentType: mimetype
   }).window.document;
 }
 
-var docs = require('../test_data/from_spec.js');
+//var docs = require('../test_data/from_spec.js');
+var docs = await import('../test_data/from_spec.js');
 
 var tests = [
   {
@@ -393,24 +394,13 @@ var tests = [
     cfi: "epubcfi(/2~42.43@100:101/4!/6/8:100/6:200)",
     parsed: [
       [
-        {
-          "nodeIndex": 2
-        },
-        {
-          "nodeIndex": 4
-        }
+        { "nodeIndex": 2 },
+        { "nodeIndex": 4 }
       ],
       [
-        {
-          "nodeIndex": 6
-        },
-        {
-          "nodeIndex": 8
-        },
-        {
-          "nodeIndex": 6,
-          "offset": 200
-        }
+        { "nodeIndex": 6 },
+        { "nodeIndex": 8 },
+        { "nodeIndex": 6, "offset": 200 }
       ]
     ]
   }, { // Test that parser ignores vender extensions
@@ -429,15 +419,14 @@ var tests = [
         }
       ]
     ]
-
   }
 ];
 
 var testCount = 0;
-for(let test of tests) {
-  if(test.parsed) testCount++;
-  if(test.resolvedURI) testCount++;
-  if(test.resolved) testCount++;
+for (let test of tests) {
+  if (test.parsed) testCount++;
+  if (test.resolvedURI) testCount++;
+  if (test.resolved) testCount++;
 }
   
 const opfDOM = parseDOM(docs.opf, 'application/xhtml+xml');
@@ -449,27 +438,24 @@ tape('Simple tests', function(t) {
 
   var uri, bookmark;
   for(let test of tests) {
-
     try {
-      var cfi = new CFI(test.cfi);
+      const cfi = new CFI(test.cfi);
       
       if(debug) console.log("parsed:", JSON.stringify(cfi.get(), null, 2));
 
-      if(test.parsed) {
+      if (test.parsed) {
         t.deepEqual(cfi.get(), test.parsed);
       }
 
-      if(test.resolvedURI) {
-
+      if (test.resolvedURI) {
         uri = cfi.resolveURI(0, opfDOM);
         if(debug) console.log("resolvedURI:", uri);
         t.equal(uri, test.resolvedURI);
       }
       
-      if(test.resolved) {
-
+      if (test.resolved) {
         bookmark = cfi.resolveLast(htmlDOM, test.opts);
-        if(bookmark.isRange) {
+        if ('isRange' in bookmark && bookmark.isRange) {
           bookmark.from.node = bookmark.from.node.outerHTML || bookmark.from.node.textContent;
           bookmark.to.node = bookmark.to.node.outerHTML || bookmark.to.node.textContent;
         } else {
@@ -486,3 +472,5 @@ tape('Simple tests', function(t) {
   }
 
 });
+
+export {};

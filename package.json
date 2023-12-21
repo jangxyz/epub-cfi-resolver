@@ -5,22 +5,25 @@
     "type": "git",
     "url": "https://github.com/fread-ink/epub-cfi-resolver.git"
   },
-  "dependencies": {},
   "author": {
     "name": "Marc Juul",
     "email": "npm@juul.io",
     "url": "https://github.com/juul"
   },
   "devDependencies": {
+    "@types/jsdom": "^21.1.6",
+    "@types/tape": "^5.6.4",
     "browserify": "^16.5.0",
     "jsdom": "^16.2.0",
     "tape": "^4.13.2",
+    "tape-es": "^1.2.17",
     "watchify": "^4.0.0"
   },
   "scripts": {
     "build": "browserify example/example.js -o example/bundle.js",
     "watch": "watchify example/example.js -o example/bundle.js",
-    "test": "tape tests/*.js"
+    "test": "tape-es 'tests/*.js'"
   },
-  "license": "AGPL-3.0"
+  "license": "AGPL-3.0",
+  "type": "module"
 }
