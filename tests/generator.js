@@ -47,17 +47,13 @@ tape('Generator', function(t) {
   var cfiStr = 'epubcfi(/2/4[body01]/10[para05]/3:5)';
   
   var node = htmlDOM.querySelector('#para05')?.lastChild;
-  
   generateAndCompare(t, htmlDOM, node, 5, cfiStr)
 
   node = nwHtmlDOM.querySelector('#para05')?.lastChild;
-  
   generateAndCompare(t, nwHtmlDOM, node, 5, cfiStr)
 
   cfiStr = 'epubcfi(/2/4/2[!/^[^]^,^;]/2/4[!/foo^^^[^]]/1:10)';
-
   node = badDOM.getElementById('!/foo^[]')?.lastChild;
-  
   generateAndCompare(t, badDOM, node, 1, cfiStr);
   
   cfiStr = 'epubcfi(/6/4[chap01ref]!/2/4[body01]/16[svgimg]:1)';

@@ -1,15 +1,7 @@
 /**
  * @typedef {Document | XMLDocument} Doc
  */
-
-/**
- * @typedef {{ node: Node; offset: number; relativeToNode?: 'before' | 'after' }} CFIIndexedObject
- */
   
-/**
- * @typedef {SubPart[]} FromTo
- */
-
 const { ELEMENT_NODE, TEXT_NODE, CDATA_SECTION_NODE } = (() => {
   let ELEMENT_NODE = 1;
   let TEXT_NODE = 3;
@@ -50,7 +42,7 @@ function cfiEscape(str) {
  * @param {string} str 
  * @param {RegExp} regExp 
  * @param {number} add 
- * @returns 
+ * @returns {number[]}
  */
 function matchAll(str, regExp, add) {
   add = add ?? 0;
@@ -61,11 +53,12 @@ function matchAll(str, regExp, add) {
   do {
     const m = str.match(regExp);
     if (!m) break;
+    const matchIndex = /** @type {number} */ (m.index);
 
-    matches.push(m.index + add);
-    offset += m.index + m.length;
-    str = str.slice(m.index + m.length);
-  } while(offset < str.length);
+    matches.push(matchIndex + add);
+    offset += matchIndex + m.length;
+    str = str.slice(matchIndex + m.length);
+  } while (offset < str.length);
 
   return matches;
 }
@@ -99,9 +92,9 @@ function closest(a, n) {
  * nodes, calculate the count/index of the node according to the CFI spec.
  * Also re-calculate offset if supplied and relevant
  * 
- * @param {NodeListOf<Element>} nodes 
- * @param {Element} n 
- * @param {number} offset 
+ * @param {NodeListOf<Node>} nodes 
+ * @param {Node} n 
+ * @param {number} [offset]
  * @returns {{count: number; offset?: number}}
  */
 function calcSiblingCount(nodes, n, offset) {
@@ -111,7 +104,7 @@ function calcSiblingCount(nodes, n, offset) {
   let firstNode = true;
 
   for (let i=0; i < nodes.length; i++) {
-    const node = nodes[i];
+    const node = /** @type {Element} */(nodes[i]);
     if (node.nodeType === ELEMENT_NODE) {
       if (lastWasElement || firstNode) {
         count += 2;
@@ -137,7 +130,7 @@ function calcSiblingCount(nodes, n, offset) {
       }
       
       if (n === node) {
-        return { count, offset: offset + prevOffset };
+        return { count, offset: (offset ?? 0) + prevOffset };
       }
 
       prevOffset += (node.textContent ?? '').length;
@@ -192,31 +185,57 @@ function compareSpatial(a, b) {
 }
 
 /**
- * @typedef {{
- *     nodeIndex: number;
- *     offset?: number;
- *     spatial?: {
- *       x: number;
- *       y: number;
- *     } | undefined;
- *     temporal?: number;
- *     textLocationAssertion?: {
- *       pre: string;
- *       post?: string;
- *     } | string;
- *     sideBias?: 'before' | 'after';
- *     nodeID: string | null | undefined;
- * }} SubPart
+ * @typedef {object} ParsedPiece
+ * @property   {number} nodeIndex
+ * @property   {string | null} [nodeID]
+ * @property   {number} [offset]
  * 
- * @typedef {SubPart[]} Part
+ * @property   {{ x: number; y: number; } | undefined} [spatial]
+ *   - A path terminating with a leading at sign (@) followed by two colon-separated 
+ *     numbers indicates a 2D spatial position within an image or video. (3.1.6)
+ * 
+ * @property   {number} [temporal]
+ *   - A path terminating with a leading tilde (~) followed by a number indicates 
+ *     a temporal position for audio or video measured in seconds. (3.1.5)
+ * 
+ * @property   {TextLocalAssertion | string} [textLocationAssertion] 
+ *   - An EPUB CFI MAY specify a substring that is expected to precede and/or 
+ *     follow the encountered point, but such assertions must occur only (3.1.8)
+ *     after a character offset. (3.1.8)
+ * 
+ * @property   {'before' | 'after'} [sideBias]
+ * 
+ * @typedef {{ pre: string; post?: string; }} TextLocalAssertion
  */
+
+/**
+ * @typedef {ParsedPiece[]} Part1
+ * @typedef {ParsedPiece | ParsedPiece[]} FromTo
+ * @typedef {Part1[]} GetFromTo
+ */
+
+/**
+ * @typedef {{ node: Node; offset?: number; relativeToNode?: 'before' | 'after' }} CFIIndexedObject
+ * 
+ * @typedef {Omit<ParsedPiece, "nodeIndex"> & CFIIndexedObject} CFILocation
+ */
+
+/**
+ * @typedef {object} Options
+ * @property {boolean} stricter
+ *  - Strip temporal, spatial, offset and textLocationAssertion from places where they don't make sense
+ * @property {boolean} flattenRange
+ *  - If CFI is a Simple Range, pretend it isn't by parsing only the start of the range
+ */
+
 class CFI {
 
   /**
    * @param {string} str 
-   * @param {unknown} [opts]
+   * @param {Partial<Options>} [opts]
    */
   constructor(str, opts) {
+    /** @type {Partial<Options>} */
     this.opts = Object.assign({
       // If CFI is a Simple Range, pretend it isn't
       // by parsing only the start of the range
@@ -236,14 +255,18 @@ class CFI {
     if (m.length < 2) return; // Empty CFI
 
     str = m[1];
-    /** @type {Part[]} */
+
+    /* @type {ParsedPiece | ParsedPiece[]}} */
+    /** @type {Part1[]} */
     this.parts = [];
 
-    /** @type {SubPart[]} */
+    /** @type {ParsedPiece[]} */
     let subParts = [];
     let sawComma = 0;
     while (str.length) {
+      //console.log('...', { subParts, sawComma, 'this.parts': JSON.stringify(this.parts), 'this.to': JSON.stringify(this.to), 'this.from': JSON.stringify(this.from), 'str(remaining)': `${JSON.stringify(str)}(${str.length})`, })
       const { parsed, offset, newDoc } = this.parse(str);
+      //console.log(`🚀 ~ file: index.js:258 ~ CFI ~ constructor ~ parse "${str.slice(0, offset)}" from '${str}':`, { parsed, offset, newDoc, });
 
       if (!parsed || offset === null) throw new Error("Parsing failed");
       if (sawComma && newDoc) throw new Error("CFI is a range that spans multiple documents. This is not allowed");
@@ -254,7 +277,7 @@ class CFI {
       if (newDoc || str.length - offset <= 0) {
         // Handle end if this was a range
         if (sawComma === 2) {
-          /** @type {SubPart[]} */
+          /** @type {FromTo=} */
           this.to = subParts;
         } else { // not a range
           this.parts.push(subParts);
@@ -273,7 +296,7 @@ class CFI {
           subParts = [];
         } else if (sawComma === 1) {
           if (subParts.length) {
-            /** @type {SubPart[]} */
+            /** @type {FromTo=} */
             this.from = subParts;
           }
           subParts = [];
@@ -283,8 +306,8 @@ class CFI {
       }
     }
 
-    if (this.from && this.from.length) {
-      if (this.opts.flattenRange || !this.to || !this.to.length) {
+    if (Array.isArray(this.from)) {
+      if (this.opts.flattenRange || !Array.isArray(this.to)) {
         this.parts = this.parts.concat(this.from);
         delete this.from;
         delete this.to;
@@ -300,12 +323,18 @@ class CFI {
   }
 
   /**
+   * Strip temporal, spatial, offset and textLocationAssertion
+   * from places where they don't make sense.
    * 
-   * @param {Part[] | undefined} parts
+   * @param {Part1[] | undefined} partsArg
    * @returns 
    */
-  removeIllegalOpts(parts = undefined) {
-    if (!parts) {
+  removeIllegalOpts(partsArg = undefined) {
+    /** @type {Part1[]} */
+    let parts;
+    if (partsArg) {
+      parts = partsArg;
+    } else {
       if (this.from) {
         this.removeIllegalOpts(this.from);
         if (!this.to) return;
@@ -315,7 +344,7 @@ class CFI {
       }
     }
 
-    for (let i=0; i < parts.length; i++) {
+    for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
       for (let j=0; j < part.length - 1; j++) {
         const subpart = part[j];
@@ -331,7 +360,7 @@ class CFI {
    * 
    * @param {Node} node 
    * @param {number} [offset]
-   * @param {*} [extra]
+   * @param {string} [extra]
    * @returns {string}
    */
   static generatePart(node, offset, extra) {
@@ -346,7 +375,8 @@ class CFI {
       const o = calcSiblingCount(node.parentNode.childNodes, node, offset);
       if (!cfi && o.offset) cfi = ':' + o.offset;
       
-      cfi = '/' + o.count + (/** @type {Element} */(node).id ? `[${cfiEscape(node.id)}]` : '') + cfi;
+      const nodeId = (/** @type {Element} */(node)).id;
+      cfi = '/' + o.count + (nodeId ? `[${cfiEscape(nodeId)}]` : '') + cfi;
       
       node = node.parentNode;
 
@@ -363,10 +393,11 @@ class CFI {
    * 
    * @param {Node | { node: Node, offset?: number }[]} node 
    * @param {number} [offset]
-   * @param {unknown} [extra]
+   * @param {string} [extra]
    * @returns {string}
    */
   static generate(node, offset, extra) {
+    /** @type {string} */
     let cfi;
     
     if (node instanceof Array) {
@@ -385,7 +416,6 @@ class CFI {
   }
 
   /**
-   * 
    * @this {CFI}
    * @param {string | CFI} cfi 
    * @returns 
@@ -403,14 +433,14 @@ class CFI {
 
   /**
    * Takes two CFI paths and compares them
-   * @param {FromTo} a 
-   * @param {FromTo} b 
-   * @returns 
+   * 
+   * @param {Part1[]} a 
+   * @param {Part1[]} b 
+   * @returns {number}
    */
   static comparePath(a, b) {
     const max = Math.max(a.length, b.length);
-    
-    for (let i=0; i < max; i++) {
+    for (let i = 0; i < max; i++) {
       const cA = a[i];
       const cB = b[i];
       if (!cA) return -1;
@@ -419,11 +449,13 @@ class CFI {
       const diff = this.compareParts(cA, cB);
       if (diff) return diff;
     }
+
     return 0;
   }
 
   /**
    * Sort an array of CFI objects
+   * 
    * @param {CFI[]} a 
    */
   static sort(a) {
@@ -441,25 +473,40 @@ class CFI {
   static compare(a, b) {
     let oA = a.get();
     let oB = b.get();
-    if (a.isRange || b.isRange) {
-      if (a.isRange && b.isRange) {
+
+    /**
+     * Type guarding a against oA
+     * @param {CFI} a 
+     * @param {Part1[] | { from: Part1[]; to: Part1[]; isRange: true; }} oA 
+     * @returns {oA is { from: Part1[]; to: Part1[]; isRange: true; }}
+     */
+    function isInRange(a, oA) {
+      return a.isRange && 'isRange' in oA;
+    }
+
+    if (isInRange(a, oA) || isInRange(b, oB)) {
+      if (isInRange(a, oA) && isInRange(b, oB)) {
         let diff = this.comparePath(oA.from, oB.from);
         if (diff) return diff;
+
         return this.comparePath(oA.to, oB.to);
       }
-      if (a.isRange) oA = oA.from;
-      if (b.isRange) oB = oB.from;
+      if (isInRange(a, oA)) oA = oA.from;
+      if (isInRange(b, oB)) oB = oB.from;
 
       return this.comparePath(oA, oB);
-    } else { // neither a nor b is a range
+    } 
+    // neither a nor b is a range
+    else { 
       return this.comparePath(oA, oB);
     }
   }
   
   /**
    * Takes two parsed path parts (assuming path is split on '!') and compares them.
-   * @param {Part} a 
-   * @param {Part} b 
+   * 
+   * @param {Part1} a 
+   * @param {Part1} b 
    * @returns {number}
    */
   static compareParts(a, b) {
@@ -497,6 +544,7 @@ class CFI {
       diff = (cA.offset || 0) - (cB.offset || 0);
       if (diff) return diff;
     }
+
     return 0;
   }
   
@@ -528,7 +576,7 @@ class CFI {
   }
   
   /**
-   * @returns 
+   * @returns {GetFromTo}
    */
   getFrom() {
     if (!this.isRange) throw new Error("Trying to get beginning of non-range CFI");
@@ -536,21 +584,28 @@ class CFI {
     if (!this.from) {
       return this.deepClone(this.parts);
     }
+
     const parts = this.deepClone(this.parts);
     parts[parts.length-1] = parts[parts.length-1].concat(this.from);
     return parts;
   }
 
+  /**
+   * @returns {GetFromTo}
+   */
   getTo()  {
     if (!this.isRange) throw new Error("Trying to get end of non-range CFI");
+
     const parts = this.deepClone(this.parts);
     parts[parts.length-1] = parts[parts.length-1].concat(this.to);
     return parts
   }
-  
+
+  /*
+   * @returns {Part1[] | { from: FromTo; to: FromTo; isRange: true }}
+   */
   /**
-   * 
-   * @returns {Part[]}
+   * @returns {Part1[] | { from: GetFromTo; to: GetFromTo; isRange: true }}
    */
   get() {
     if (this.isRange) {
@@ -564,10 +619,8 @@ class CFI {
   }
   
   /**
-   * 
-   * @param {SubPart} o 
+   * @param {Pick<ParsedPiece, 'textLocationAssertion' | 'sideBias'>} o 
    * @param {string | null} loc 
-   * @returns 
    */
   parseSideBias(o, loc) {
     if (!loc) return;
@@ -596,6 +649,10 @@ class CFI {
     }
   }
   
+  /**
+   * @param {string} range 
+   * @returns {{x: number; y: number} | undefined}
+   */
   parseSpatialRange(range) {
     if (!range) return undefined;
     const m = range.trim().match(/^([\d\.]+):([\d\.]+)$/);
@@ -612,19 +669,27 @@ class CFI {
   
   /**
    * @param {string} cfi 
-   * @returns {{ parsed: SubPart, offset: number, newDoc: boolean }}
+   * @returns {{ parsed: ParsedPiece, offset: number, newDoc: boolean }}
    */
   parse(cfi) {
+    /** @type {Partial<ParsedPiece>} */
     let o = {};
     const isNumber = new RegExp(/[\d]/);
 
     /** @type {string | null} */
     let f = null;
-    let state;
-    let prevState;
-    let escape;
+
+    /** @typedef {'!' | '/' | ':' | '@' | '[' | '~' | 'nodeID' | null} State */
+    /** @type {State} */
+    let state = null;
+    /** @type {State} */
+    let prevState = null;
+
+    let escape = false;
     let seenColon = false;
     let seenSlash = false;
+
+    /** @type {number} */
     let index;
 
     for (index=0; index <= cfi.length; index++) {
@@ -779,18 +844,20 @@ class CFI {
         }
       }
 
-
       if (state === '[') {
         if (cur === ']' && !escape) {
           prevState = state;
           state = null;
           this.parseSideBias(o, f);
           f = null;
-        } else if (cur === ',' && !escape) {
-          o.textLocationAssertion = {};
-          if (f) {
-            o.textLocationAssertion.pre = f;
-          }
+        } 
+        // parse Text Local Assertion (3.1.8)
+        else if (cur === ',' && !escape) {
+          //o.textLocationAssertion = {};
+          //if (f) {
+          //  o.textLocationAssertion.pre = f;
+          //}
+          o.textLocationAssertion = f ? { pre: f } : {};
           f = null;
         } else {
           if (!f) {
@@ -825,27 +892,31 @@ class CFI {
     
     if (!o.nodeIndex && o.nodeIndex !== 0) throw new Error("Missing child node index in CFI");
     
-    return { parsed: o, offset: index, newDoc: (state === '!') };
+    return { 
+      parsed: /** @type {ParsedPiece} */(o), 
+      offset: index, 
+      newDoc: (state === '!') 
+    };
   }
 
   /**
-   * The CFI counts child nodes differently from the DOM
-   * Retrive the child of parentNode at the specified index
-   * according to the CFI standard way of counting
+   * The CFI counts child nodes differently from the DOM. Retrieve the child of 
+   * parentNode at the specified index according to the CFI standard way of counting.
+   * 
    * @param {Doc} dom 
    * @param {Node} parentNode 
    * @param {number} index 
    * @param {number} offset 
-   * @returns {CFIIndexedObject | undefined}
+   * @returns {CFIIndexedObject}
    */
   getChildNodeByCFIIndex(dom, parentNode, index, offset) {
     const children = parentNode.childNodes;
-    if (!children.length) return {node: parentNode, offset: 0};
+    if (!children.length) return { node: parentNode, offset: 0 };
 
     // index is pointing to the virtual node before the first node
     // as defined in the CFI spec
     if (index <= 0) {
-      return {node: children[0], relativeToNode: 'before', offset: 0 };
+      return { node: children[0], relativeToNode: 'before', offset: 0 };
     }
       
     let cfiCount = 0;
@@ -923,7 +994,7 @@ class CFI {
       const o = { 
         node: lastChild || parentNode,
         offset: 0,
-        relativeToNode: /** @type {'after'} */ ('after'),
+        relativeToNode: /** @type {'after'} */('after'),
       };
 
       if (!lastChild) {
@@ -937,7 +1008,9 @@ class CFI {
       }
 
       return o;
-    }  
+    }
+
+    throw new Error('this probably should not happen');
   }
 
   /**
@@ -953,12 +1026,13 @@ class CFI {
   }
 
   /**
-   * Use a Text Location Assertion to correct and offset
+   * Use a Text Location Assertion to correct and offset.
+   * 
    * @param {Doc} dom 
    * @param {Node} node 
    * @param {number} offset 
    * @param {string | {pre: string; post: string}} assertion 
-   * @returns 
+   * @returns {CFIIndexedObject}
    */
   correctOffset(dom, node, offset, assertion) {
     let curNode = node;
@@ -1014,7 +1088,8 @@ class CFI {
       newOffset -= nodeLengths[i];
       if (newOffset < 0) return {node, offset}
 
-      if (!curNode.nextSibling || i+1 >= nodeOffsets.length) // ??
+      //if (!curNode.nextSibling || i+1 >= nodeOffsets.length) // ??
+      if (!curNode.nextSibling || i+1 >= nodeLengths.length) // ??
         return { node, offset };
       i++;
       curNode = curNode.nextSibling;
@@ -1028,8 +1103,8 @@ class CFI {
    * @param {number} index 
    * @param {*} subparts 
    * @param {Doc} dom 
-   * @param {*} [opts]
-   * @returns 
+   * @param {Partial<{ ignoreIDs: boolean }>} [opts]
+   * @returns {CFIIndexedObject}
    */
   resolveNode(index, subparts, dom, opts) {
     opts = Object.assign({}, opts || {});
@@ -1070,9 +1145,9 @@ class CFI {
     }
     
     /** @type {CFIIndexedObject} */
-    let o = {node, offset: 0};
+    let o = { node, offset: 0 };
     
-    let nodeIndex;
+    //let nodeIndex;
     for (let i=startFrom; i < subparts.length; i++) {
       subpart = subparts[i];
 
@@ -1086,15 +1161,18 @@ class CFI {
     return o;
   }
   
-  // Each part of a CFI (as separated by '!')
-  // references a separate HTML/XHTML/XML document.
-  // This function takes an index specifying the part
-  // of the CFI and the appropriate Doc or XMLDocument
-  // that is referenced by the specified part of the CFI
-  // and returns the URI for the document referenced by
-  // the next part of the CFI
-  // If the opt `ignoreIDs` is true then IDs
-  // will not be used while resolving
+  /**
+   * Each part of a CFI (as separated by '!') references a separate HTML/XHTML/XML document.
+   * This function takes an index specifying the part of the CFI and the appropriate Doc or 
+   * XMLDocument that is referenced by the specified part of the CFI and returns the URI 
+   * for the document referenced by the next part of the CFI.
+   * If the opt `ignoreIDs` is true then IDs will not be used while resolving.
+   * 
+   * @param {number} index 
+   * @param {Doc} dom 
+   * @param {Partial<{ ignoreIDs: boolean }>} [opts]
+   * @returns 
+   */
   resolveURI(index, dom, opts) {
     opts = opts || {};
     if (index < 0 || index > this.parts.length - 2) {
@@ -1106,7 +1184,7 @@ class CFI {
     
     let o = this.resolveNode(index, subparts, dom, opts);
     
-    let node = /** @type {Element} */ (o.node);
+    let node = /** @type {Element} */(o.node);
 
     const tagName = node.tagName.toLowerCase();
     if (tagName === 'itemref'
@@ -1114,8 +1192,11 @@ class CFI {
 
       const idref = node.getAttribute('idref');
       if (!idref) throw new Error("Referenced node had not 'idref' attribute");
-      node = dom.getElementById(idref);
-      if (!node) throw new Error("Specified node is missing from manifest");
+
+      const _nodeOrNull = dom.getElementById(idref);
+      if (!_nodeOrNull) throw new Error("Specified node is missing from manifest");
+      node = _nodeOrNull;
+
       const href = node.getAttribute('href');
       if (!href) throw new Error("Manifest item is missing href attribute");
       
@@ -1149,45 +1230,48 @@ class CFI {
    * @returns {T}
    */
   deepClone(o) {
-    return JSON.parse(JSON.stringify(o));
+    //return JSON.parse(JSON.stringify(o));
+    return structuredClone(o);
   }
 
   /**
    * 
    * @param {Doc} dom 
-   * @param {*} parts 
-   * @returns 
+   * @param {Part1[]} parts 
+   * @returns {CFILocation}
    */
   resolveLocation(dom, parts) {
     const index = parts.length - 1;
     const subparts = parts[index];
     if (!subparts) throw new Error("Missing CFI part for index: " + index);
 
-    let o = this.resolveNode(index, subparts, dom);
+    const o = this.resolveNode(index, subparts, dom);
+
+    //const lastpart = this.deepClone(subparts[subparts.length - 1]);
+
+    //delete lastpart.nodeIndex;
+    //if (!lastpart.offset) delete o.offset;
+    //Object.assign(lastpart, o);
     
-    let lastpart = this.deepClone(subparts[subparts.length - 1]);
+    const { nodeIndex, ...lastpart } = this.deepClone(subparts[subparts.length - 1]);
     
-    delete lastpart.nodeIndex;
-    if (!lastpart.offset) delete o.offset;
+    /** @type {Omit<ParsedPiece, 'nodeIndex'> & CFIIndexedObject} */
+    const result = Object.assign({}, lastpart, o);
+    if (!lastpart.offset) delete result.offset;
     
-    Object.assign(lastpart, o);
-    
-    return lastpart;    
+    return result;    
   }
   
   /**
-   * Takes the Doc or XMLDocument for the final
-   * document referenced by the CFI
-   * and returns the node and offset into that node
+   * Takes the Doc or XMLDocument for the final document referenced by the CFI
+   * and returns the node and offset into that node.
    * 
    * @param {Doc} dom 
-   * @param {*} opts 
-   * @returns 
+   * @param {Partial<ResolveOptions>} [opts] 
+   * @returns {CFILocation | {from: CFILocation; to: CFILocation; isRange: true} | Range}
    */
   resolveLast(dom, opts) {
-    opts = Object.assign({
-      range: false
-    }, opts || {});
+    opts = Object.assign({ range: false }, opts || {});
     
     if (!this.isRange) {
       return this.resolveLocation(dom, this.parts);
@@ -1195,6 +1279,7 @@ class CFI {
 
     if (opts.range) {
       const range = dom.createRange();
+
       const from = this.getFrom();
       if (from.relativeToNode === 'before') {
         range.setStartBefore(from.node, from.offset)
@@ -1223,9 +1308,12 @@ class CFI {
     };
   }
 
+  /**
+   * @param {string} uri 
+   * @returns {Promise<Document | null>}
+   */
   async fetchAndParse(uri) {
     return new Promise((resolv, reject) => {
-      
       const xhr = new XMLHttpRequest;
       
       xhr.open('GET', uri);
@@ -1249,27 +1337,29 @@ class CFI {
   }
   
   /**
+   * @typedef {{ ignoreIDs: boolean; range: boolean }} ResolveOptions
    * 
    * @param {string | Doc} uriOrDoc 
-   * @param {((uri: string) => Promise<Doc>) | null} [fetchCB]
-   * @param {*} [opts]
+   * @param {((uri: string) => Promise<Doc | null>) | ResolveOptions | null} [arg1]
+   * @param {Partial<ResolveOptions>} [opts]
    * @returns 
    */
-  async resolve(uriOrDoc, fetchCB, opts) {
-    if (typeof fetchCB !== 'function') {
-      opts = fetchCB;
-      fetchCB = null
+  async resolve(uriOrDoc, arg1, opts) {
+    if (arg1 && typeof arg1 !== 'function') {
+      opts = arg1;
+      arg1 = null
     }
-    if (!fetchCB) {
+    if (!arg1) {
       if (typeof XMLHttpRequest === 'undefined') {
         throw new Error("XMLHttpRequest not available. You must supply a function as the second argument.");
       }
-      fetchCB = this.fetchAndParse;
+      arg1 = this.fetchAndParse;
     }
+    const fetchCB = arg1;
     
     /** @type {string | undefined} */
     let uri;
-    /** @type {Doc | undefined} */
+    /** @type {Doc | undefined | null} */
     let doc;
     if (typeof uriOrDoc === 'string') {
       uri = uriOrDoc;
@@ -1277,10 +1367,10 @@ class CFI {
       doc = uriOrDoc;
     }
 
-    let part; // ??
-    for (let i=0; i < this.parts.length - 1; i++) {
+    //let part; // ??
+    for (let i = 0; i < this.parts.length - 1; i++) {
       if (uri) doc = await fetchCB(uri);
-      uri = this.resolveURI(i, doc, opts);
+      uri = this.resolveURI(i, /** @type {Doc} */(doc), opts);
     }
 
     if (uri) doc = await fetchCB(uri);

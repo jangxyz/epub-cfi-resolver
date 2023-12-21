@@ -423,10 +423,10 @@ var tests = [
 ];
 
 var testCount = 0;
-for(let test of tests) {
-  if(test.parsed) testCount++;
-  if(test.resolvedURI) testCount++;
-  if(test.resolved) testCount++;
+for (let test of tests) {
+  if (test.parsed) testCount++;
+  if (test.resolvedURI) testCount++;
+  if (test.resolved) testCount++;
 }
   
 const opfDOM = parseDOM(docs.opf, 'application/xhtml+xml');
@@ -438,27 +438,24 @@ tape('Simple tests', function(t) {
 
   var uri, bookmark;
   for(let test of tests) {
-
     try {
       const cfi = new CFI(test.cfi);
       
       if(debug) console.log("parsed:", JSON.stringify(cfi.get(), null, 2));
 
-      if(test.parsed) {
+      if (test.parsed) {
         t.deepEqual(cfi.get(), test.parsed);
       }
 
-      if(test.resolvedURI) {
-
+      if (test.resolvedURI) {
         uri = cfi.resolveURI(0, opfDOM);
         if(debug) console.log("resolvedURI:", uri);
         t.equal(uri, test.resolvedURI);
       }
       
-      if(test.resolved) {
-
+      if (test.resolved) {
         bookmark = cfi.resolveLast(htmlDOM, test.opts);
-        if(bookmark.isRange) {
+        if ('isRange' in bookmark && bookmark.isRange) {
           bookmark.from.node = bookmark.from.node.outerHTML || bookmark.from.node.textContent;
           bookmark.to.node = bookmark.to.node.outerHTML || bookmark.to.node.textContent;
         } else {

@@ -4,7 +4,7 @@ var { default: tape } = await import('tape');
 var { default: CFI } = await import('../index.js');
 
 // Allow these tests to run outside of the browser
-var JSDOM = (await import('jsdom')).JSDOM;
+var { JSDOM } = await import('jsdom');
 
 const toCompare = [
   {
